@@ -205,10 +205,14 @@ with st.sidebar:
 
     st.divider()
     st.header("🧠 AI Sentinel (५ घटक नियम)")
-    ai_guard.max_daily_loss = st.number_input("Max Daily Loss Limit (₹)", value=ai_guard.max_daily_loss, step=500.0)
-    ai_guard.max_trades = st.number_input("कमाल ट्रेड्स मर्यादा (दिवसाला)", value=ai_guard.max_trades, min_value=1, max_value=10)
-    st.info(f"📊 आज झालेले ट्रेड्स: {ai_guard.trade_count}/{ai_guard.max_trades}")
-
+    default_loss = getattr(ai_guard, 'max_daily_loss', 3000.0)
+    default_trades = getattr(ai_guard, 'max_trades', 3)
+    
+    ai_guard.max_daily_loss = st.number_input("Max Daily Loss Limit (₹)", value=float(default_loss), step=500.0)
+    ai_guard.max_trades = st.number_input("कमाल ट्रेड्स मर्यादा (दिवसाला)", value=int(default_trades), min_value=1, max_value=10)
+    
+    current_trades = getattr(ai_guard, 'trade_count', 0)
+    st.info(f"📊 आज झालेले ट्रेड्स: {current_trades}/{ai_guard.max_trades}")
     st.divider()
     st.header("📲 Telegram Alerts")
     tg_token = st.text_input("Bot Token", type="password")
