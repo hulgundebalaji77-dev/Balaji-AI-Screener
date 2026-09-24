@@ -266,10 +266,10 @@ with ai_banner1:
         st.success(f"🛡️ *AI Safety Shield Active:* ५ घटक नियम सक्रिय आहेत | आजचे ट्रेड्स: {ai_guard.trade_count}/{ai_guard.max_trades}")
 with ai_banner2:
     if st.button("🔄 Reset AI Lock", help="मॅन्युअल ओव्हरराइड"):
-    ai_guard.is_locked = False
-    ai_guard.is_terminal_locked = False
-    ai_guard.trade_count = 0
-    st.rerun()
+        ai_guard.is_locked = False
+        ai_guard.is_terminal_locked = False
+        ai_guard.trade_count = 0
+        st.rerun()
 st.divider()
 
 # TABS
