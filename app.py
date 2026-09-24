@@ -187,7 +187,7 @@ st.set_page_config(layout="wide", page_title="BALAJI Options Algo Desk", page_ic
 
 # Safe Session State Init (Indentation सुरक्षित ठेवले आहे)
 if 'ai_sentinel' not in st.session_state:
-    st.session_state.ai_sentinel = AIRiskSentinel(max_daily_loss=3000.0, max_trades=3, capital=50000.0)
+    st.session_state.ai_sentinel = AIRiskSentinel()
 
 ai_guard = st.session_state.ai_sentinel
 
