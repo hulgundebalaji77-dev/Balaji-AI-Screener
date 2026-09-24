@@ -158,8 +158,19 @@ with st.sidebar:
     st.text_input("TOTP Secret", type="password", value="TOTP_SECRET")
 
     if st.button("🔗 Connect Broker API", use_container_width=True):
-        st.success("Angel One API यशस्वीरीत्या कनेक्ट झाले!")
-
+        try:
+            from SmartApi import SmartConnect
+            smart_obj = SmartConnect(api_key=api_key)
+            totp = pyotp.TOTP(totp_secret).now()
+            session_data = smart_obj.generateSession(client_code, pin, totp)
+            if session_data.get('status'):
+                st.session_state['broker_api'] = smart_obj
+                st.success("✅ Angel One API कनेक्ट झाले आणि लाइव्ह डेटा सुरू झाला!")
+                st.rerun()
+            else:
+                st.error(f"लॉगिन त्रुटी: {session_data.get('message')}")
+        except Exception as e:
+            st.error(f"त्रुटी: {e}")
     st.divider()
     st.header("📲 Telegram Alerts")
     tg_token = st.text_input("Bot Token", type="password")
