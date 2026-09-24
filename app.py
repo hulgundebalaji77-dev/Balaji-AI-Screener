@@ -182,27 +182,58 @@ with st.sidebar:
 # TOP TICKER & INDEX SELECTION
 selected_index = st.selectbox("इंडेक्स निवडा:", ["NIFTY 50", "BANK NIFTY", "SENSEX"], index=0)
 
-market_config = {
-    "NIFTY 50": {"spot": 25140.50, "step": 50, "pcr": 1.15, "dte": 2, "qty": 75},
-    "BANK NIFTY": {"spot": 53250.00, "step": 100, "pcr": 0.85, "dte": 3, "qty": 30},
-    "SENSEX": {"spot": 82400.00, "step": 100, "pcr": 1.02, "dte": 1, "qty": 20}
-}
+# ==========================================
+# थेट ANGEL ONE कडून चालू लाईव्ह भाव आणणे
+# ==========================================
+def get_live_market_spot(smart_api, index_name):
+    tokens = {
+        "NIFTY 50": {"exchange": "NSE", "symbol": "Nifty 50", "token": "99926000"},
+        "BANK NIFTY": {"exchange": "NSE", "symbol": "Nifty Bank", "token": "99926009"},
+        "SENSEX": {"exchange": "BSE", "symbol": "SENSEX", "token": "1"}
+    }
+    
+    if smart_api:
+        cfg_token = tokens.get(index_name)
+        try:
+            data = smart_api.ltpData(cfg_token["exchange"], cfg_token["symbol"], cfg_token["token"])
+            if data and data.get("status") and "data" in data:
+                live_ltp = float(data["data"]["ltp"])
+                close_price = float(data["data"].get("close", live_ltp))
+                change = live_ltp - close_price
+                return live_ltp, f"{'+' if change >= 0 else ''}{change:.2f}"
+        except Exception:
+            pass
 
+    # API कनेक्ट नसेल किंवा बंद असेल तर डीफॉल्ट भाव
+    defaults = {"NIFTY 50": 23063.10, "BANK NIFTY": 50500.00, "SENSEX": 75000.00}
+    return defaults.get(index_name, 23063.10), "+0.00"
+
+# १. कनेक्ट केलेला Angel One ऑब्जेक्ट मिळवणे
+smart_broker = st.session_state.get('broker_api', None)
+
+# २. थेट चालू सेकंदाचा ऑटोमॅटिक भाव घेणे
+spot, live_change = get_live_market_spot(smart_broker, selected_index)
+
+# ३. इंडेक्स कॉन्फिगरेशन
+market_config = {
+    "NIFTY 50": {"step": 50, "pcr": 1.15, "dte": 2, "qty": 75},
+    "BANK NIFTY": {"step": 100, "pcr": 0.85, "dte": 3, "qty": 30},
+    "SENSEX": {"step": 100, "pcr": 1.02, "dte": 1, "qty": 20}
+}
 cfg = market_config[selected_index]
-spot = cfg["spot"]
 step = cfg["step"]
 atm_strike = int(round(spot / step) * step)
 
+# ४. स्क्रीनवर रिअल-टाइम मेट्रिक्स दाखवणे
 mcol1, mcol2, mcol3, mcol4 = st.columns(4)
 with mcol1:
-    st.metric(f"{selected_index} Spot", f"₹{spot:,.2f}", "+115.40")
+    st.metric(f"{selected_index} Spot", f"₹{spot:,.2f}", live_change)
 with mcol2:
     st.metric("ATM Strike", f"{atm_strike}", f"Step: {step}")
 with mcol3:
     st.metric("Overall PCR", f"{cfg['pcr']}", "Bullish" if cfg['pcr'] >= 1.0 else "Bearish")
 with mcol4:
     st.metric("Expiry DTE", f"{cfg['dte']} Days", "Weekly")
-
 st.divider()
 
 # TABS
