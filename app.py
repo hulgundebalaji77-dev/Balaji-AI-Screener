@@ -19,7 +19,7 @@ class AIRiskSentinel:
         self.is_locked = False
 
     def validate_trade(self, strike_type: str, dte: float, theta: float, pcr: float, trade_type: str):
-        # नियम १ व नियम ५: Daily Loss Lock & Over-trading Shield
+        # नियम १ व ५: Daily Loss Lock & Over-trading Shield
         if self.is_locked:
             return False, "❌ AI BLOCK: आजची कमाल तोटा मर्यादा (Max Loss) संपली आहे. टर्मिनल लॉक आहे."
 
@@ -45,12 +45,12 @@ class AIRiskSentinel:
 
 
 # ==========================================
-# २. TELEGRAM NOTIFIER
+# २. TELEGRAM NOTIFIER MODULE
 # ==========================================
 class TelegramNotifier:
     def _init_(self, bot_token: str, chat_id: str):
-        self.bot_token = bot_token.strip()
-        self.chat_id = chat_id.strip()
+        self.bot_token = bot_token.strip() if bot_token else ""
+        self.chat_id = chat_id.strip() if chat_id else ""
         self.base_url = f"https://api.telegram.org/bot{self.bot_token}/sendMessage"
 
     def send_raw(self, text: str) -> bool:
@@ -181,14 +181,14 @@ def analyze_ema(candles_df: pd.DataFrame, period: int = 9, buffer_pts: float = 2
 
 
 # ==========================================
-# ५. STREAMLIT UI SETUP
+# ५. STREAMLIT UI SETUP & INITIALIZATION
 # ==========================================
 st.set_page_config(layout="wide", page_title="BALAJI Options Algo Desk", page_icon="⚡")
 
-# AI Sentinel State टिकवून ठेवणे
+# Safe Session State Init (Indentation सुरक्षित ठेवले आहे)
 if 'ai_sentinel' not in st.session_state:
-    if 'ai_sentinel' not in st.session_state:
-    st.session_state.ai_sentinel = AIRiskSentinel()
+    st.session_state.ai_sentinel = AIRiskSentinel(max_daily_loss=3000.0, max_trades=3, capital=50000.0)
+
 ai_guard = st.session_state.ai_sentinel
 
 st.title("⚡ BALAJI Options Pro: Trading & Algo Terminal")
@@ -261,7 +261,7 @@ with ai_banner1:
     else:
         st.success(f"🛡️ *AI Safety Shield Active:* ५ घटक नियम सक्रिय आहेत | आजचे ट्रेड्स: {ai_guard.trade_count}/{ai_guard.max_trades}")
 with ai_banner2:
-    if st.button("🔄 Reset AI Lock", help="मॅन्युअल ओव्हरराइड (फक्त गरज असल्यास)"):
+    if st.button("🔄 Reset AI Lock", help="मॅन्युअल ओव्हरराइड"):
         ai_guard.is_locked = False
         ai_guard.trade_count = 0
         st.rerun()
@@ -355,7 +355,6 @@ with tab2:
     
     with btn1:
         if st.button(f"🟢 Buy ATM Call ({atm_strike} CE)", use_container_width=True):
-            # AI कडून ५ घटकांची तपासणी
             allowed, msg = ai_guard.validate_trade(
                 strike_type="ATM",
                 dte=cfg["dte"],
