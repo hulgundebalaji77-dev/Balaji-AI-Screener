@@ -260,16 +260,16 @@ with mcol4:
 st.divider()
 ai_banner1, ai_banner2 = st.columns([3, 1])
 with ai_banner1:
-    if ai_guard.is_locked:
+    if getattr(ai_guard, 'is_locked', False) or getattr(ai_guard, 'is_terminal_locked', False):
         st.error("🛑 *AI सुरक्षा कवच: टर्मिनल लॉक आहे.* कॅपिटल संरक्षणासाठी नवीन ऑर्डर्स बंद आहेत.")
     else:
         st.success(f"🛡️ *AI Safety Shield Active:* ५ घटक नियम सक्रिय आहेत | आजचे ट्रेड्स: {ai_guard.trade_count}/{ai_guard.max_trades}")
 with ai_banner2:
     if st.button("🔄 Reset AI Lock", help="मॅन्युअल ओव्हरराइड"):
-        ai_guard.is_locked = False
-        ai_guard.trade_count = 0
-        st.rerun()
-
+    ai_guard.is_locked = False
+    ai_guard.is_terminal_locked = False
+    ai_guard.trade_count = 0
+    st.rerun()
 st.divider()
 
 # TABS
