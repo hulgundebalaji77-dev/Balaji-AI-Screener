@@ -1,4 +1,8 @@
 streamlit
-yfinance
+plotly
 pandas
-scikit-learn
+numpy
+scipy
+requests
+pyotp
+smartapi-python
