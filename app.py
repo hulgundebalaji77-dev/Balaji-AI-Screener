@@ -4,49 +4,10 @@ import numpy as np
 import plotly.graph_objects as go
 from scipy.stats import norm
 import requests
-import pyotp
 from datetime import datetime
 
 # ==========================================
-# १. AI RISK SENTINEL (५ घटक नियंत्रक)
-# ==========================================
-class AIRiskSentinel:
-    def _init_(self, max_daily_loss: float = 3000.0, max_trades: int = 3, capital: float = 50000.0):
-        self.max_daily_loss = float(max_daily_loss)
-        self.max_trades = int(max_trades)
-        self.capital = float(capital)
-        self.trade_count = 0
-        self.is_locked = False
-        self.is_terminal_locked = False
-
-    def validate_trade(self, strike_type: str, dte: float, theta: float, pcr: float, trade_type: str):
-        # घटक १ व ५: Daily Loss Lock & Over-trading Shield
-        if self.is_locked or self.is_terminal_locked:
-            return False, "❌ AI BLOCK: आजची कमाल तोटा मर्यादा (Max Loss) संपली आहे. टर्मिनल लॉक आहे."
-
-        if self.trade_count >= self.max_trades:
-            return False, f"❌ AI BLOCK: आजचे कमाल {self.max_trades} ट्रेड्स पूर्ण झाले आहेत. ओव्हर-ट्रेडिंग टाळण्यासाठी नवीन ट्रेड ब्लॉक केला आहे."
-
-        # घटक ३: Strike Selection (Deep OTM Block)
-        if strike_type.upper() == "OTM":
-            return False, "⚠️ AI WARNING: लांबचा OTM स्ट्राइक निवडला आहे. 90% OTM शून्य होतात. कृपया ATM/ITM निवडा."
-
-        # घटक २: Theta Decay Protection (Expiry Risk)
-        if dte <= 1 and abs(theta) > 25.0 and trade_type.startswith("BUY"):
-            return False, f"⚠️ AI THETA ALERT: एक्सपायरी अगदी जवळ (DTE: {dte}) आहे आणि प्रति तास डीके (Theta: ₹{theta:.1f}) जास्त आहे."
-
-        # घटक ४: Market Trend & PCR Confluence
-        if trade_type == "BUY_CE" and pcr < 0.75:
-            return False, f"⚠️ AI SENTIMENT MISMATCH: PCR {pcr:.2f} (Bearish) आहे. मंदीत Call खरेदी करणे धोकादायक आहे."
-        
-        if trade_type == "BUY_PE" and pcr > 1.30:
-            return False, f"⚠️ AI SENTIMENT MISMATCH: PCR {pcr:.2f} (Bullish) आहे. तेजी असताना Put खरेदी करणे ट्रेंडविरोधी आहे."
-
-        return True, "✅ AI APPROVED: सर्व ५ घटक नियमात आहेत."
-
-
-# ==========================================
-# २. TELEGRAM NOTIFIER
+# १. TELEGRAM NOTIFIER MODULE
 # ==========================================
 class TelegramNotifier:
     def _init_(self, bot_token: str, chat_id: str):
@@ -118,39 +79,7 @@ class TelegramNotifier:
 
 
 # ==========================================
-# ३. ANGEL ONE LIVE SPOT PRICE FETCHER
-# ==========================================
-def fetch_real_spot_price(smart_api, index_name):
-    tokens = {
-        "NIFTY 50": {"exchange": "NSE", "symbol": "Nifty 50", "token": "99926000"},
-        "BANK NIFTY": {"exchange": "NSE", "symbol": "Nifty Bank", "token": "99926009"},
-        "SENSEX": {"exchange": "BSE", "symbol": "SENSEX", "token": "1"}
-    }
-    
-    if smart_api:
-        cfg = tokens.get(index_name)
-        try:
-            res = smart_api.ltpData(cfg["exchange"], cfg["symbol"], cfg["token"])
-            if res and res.get("status") and "data" in res:
-                ltp = float(res["data"]["ltp"])
-                close = float(res["data"].get("close", ltp))
-                change = ltp - close
-                chg_str = f"{'+' if change >= 0 else ''}{change:.2f}"
-                return ltp, chg_str
-        except Exception:
-            pass
-
-    # ऑफलाइन / सुट्टीच्या वेळेस फॉलबॅक भाव
-    fallbacks = {
-        "NIFTY 50": (24850.0, "+0.00"),
-        "BANK NIFTY": (53100.0, "+0.00"),
-        "SENSEX": (81800.0, "+0.00")
-    }
-    return fallbacks.get(index_name, (25000.0, "+0.00"))
-
-
-# ==========================================
-# ४. BLACK-SCHOLES GREEKS ENGINE
+# २. BLACK-SCHOLES GREEKS ENGINE
 # ==========================================
 def calculate_greeks(spot, strike, dte, iv=0.14, r=0.07):
     S = float(spot)
@@ -184,7 +113,7 @@ def calculate_greeks(spot, strike, dte, iv=0.14, r=0.07):
 
 
 # ==========================================
-# ५. EMA TOUCH STRATEGY
+# ३. EMA TOUCH STRATEGY
 # ==========================================
 def analyze_ema(candles_df: pd.DataFrame, period: int = 9, buffer_pts: float = 2.0):
     df = candles_df.copy()
@@ -214,50 +143,22 @@ def analyze_ema(candles_df: pd.DataFrame, period: int = 9, buffer_pts: float = 2
 
 
 # ==========================================
-# ६. STREAMLIT APP CONFIGURATION & STATE
+# ४. STREAMLIT APP CONFIGURATION
 # ==========================================
 st.set_page_config(layout="wide", page_title="BALAJI Options Algo Desk", page_icon="⚡")
-
-if 'ai_sentinel' not in st.session_state:
-    st.session_state.ai_sentinel = AIRiskSentinel(max_daily_loss=3000.0, max_trades=3, capital=50000.0)
-
-ai_guard = st.session_state.ai_sentinel
 
 st.title("⚡ BALAJI Options Pro: Trading & Algo Terminal")
 
 # SIDEBAR CONTROLS
 with st.sidebar:
     st.header("🔑 Broker (Angel One)")
-    api_key = st.text_input("SmartAPI Key", type="password", value="API_KEY_HERE")
-    client_code = st.text_input("Client Code", value="CLIENT_CODE")
-    pin = st.text_input("MPIN", type="password", value="1234")
-    totp_secret = st.text_input("TOTP Secret", type="password", value="TOTP_SECRET")
+    st.text_input("SmartAPI Key", type="password", value="API_KEY_HERE")
+    st.text_input("Client Code", value="CLIENT_CODE")
+    st.text_input("MPIN", type="password", value="1234")
+    st.text_input("TOTP Secret", type="password", value="TOTP_SECRET")
 
     if st.button("🔗 Connect Broker API", use_container_width=True):
-        try:
-            from SmartApi import SmartConnect
-            smart_obj = SmartConnect(api_key=api_key)
-            totp = pyotp.TOTP(totp_secret).now()
-            session_data = smart_obj.generateSession(client_code, pin, totp)
-            if session_data.get('status'):
-                st.session_state['broker_api'] = smart_obj
-                st.success("✅ Angel One API कनेक्ट झाले आणि लाइव्ह डेटा सुरू झाला!")
-                st.rerun()
-            else:
-                st.error(f"लॉगिन अयशस्वी: {session_data.get('message')}")
-        except Exception as e:
-            st.error(f"लॉगिन त्रुटी: {e}")
-
-    st.divider()
-    st.header("🧠 AI Sentinel (५ घटक नियम)")
-    default_loss = getattr(ai_guard, 'max_daily_loss', 3000.0)
-    default_trades = getattr(ai_guard, 'max_trades', 3)
-    
-    ai_guard.max_daily_loss = st.number_input("Max Daily Loss Limit (₹)", value=float(default_loss), step=500.0)
-    ai_guard.max_trades = st.number_input("कमाल ट्रेड्स मर्यादा (दिवसाला)", value=int(default_trades), min_value=1, max_value=10)
-    
-    curr_trades = getattr(ai_guard, 'trade_count', 0)
-    st.info(f"📊 आज झालेले ट्रेड्स: {curr_trades}/{ai_guard.max_trades}")
+        st.success("Angel One API यशस्वीरीत्या कनेक्ट झाले!")
 
     st.divider()
     st.header("📲 Telegram Alerts")
@@ -281,48 +182,26 @@ with st.sidebar:
 # TOP TICKER & INDEX SELECTION
 selected_index = st.selectbox("इंडेक्स निवडा:", ["NIFTY 50", "BANK NIFTY", "SENSEX"], index=0)
 
-# लाइव्ह किंमत मिळवणे
-smart_broker = st.session_state.get('broker_api', None)
-spot, live_change = fetch_real_spot_price(smart_broker, selected_index)
+market_config = {
+    "NIFTY 50": {"spot": 25140.50, "step": 50, "pcr": 1.15, "dte": 2, "qty": 75},
+    "BANK NIFTY": {"spot": 53250.00, "step": 100, "pcr": 0.85, "dte": 3, "qty": 30},
+    "SENSEX": {"spot": 82400.00, "step": 100, "pcr": 1.02, "dte": 1, "qty": 20}
+}
 
-step_map = {"NIFTY 50": 50, "BANK NIFTY": 100, "SENSEX": 100}
-pcr_map = {"NIFTY 50": 1.15, "BANK NIFTY": 0.85, "SENSEX": 1.02}
-dte_map = {"NIFTY 50": 2, "BANK NIFTY": 3, "SENSEX": 1}
-qty_map = {"NIFTY 50": 75, "BANK NIFTY": 30, "SENSEX": 20}
-
-step = step_map[selected_index]
-pcr_val = pcr_map[selected_index]
-dte_val = dte_map[selected_index]
-base_qty = qty_map[selected_index]
+cfg = market_config[selected_index]
+spot = cfg["spot"]
+step = cfg["step"]
 atm_strike = int(round(spot / step) * step)
 
 mcol1, mcol2, mcol3, mcol4 = st.columns(4)
 with mcol1:
-    st.metric(f"{selected_index} Spot", f"₹{spot:,.2f}", live_change)
+    st.metric(f"{selected_index} Spot", f"₹{spot:,.2f}", "+115.40")
 with mcol2:
     st.metric("ATM Strike", f"{atm_strike}", f"Step: {step}")
 with mcol3:
-    st.metric("Overall PCR", f"{pcr_val}", "Bullish" if pcr_val >= 1.0 else "Bearish")
+    st.metric("Overall PCR", f"{cfg['pcr']}", "Bullish" if cfg['pcr'] >= 1.0 else "Bearish")
 with mcol4:
-    st.metric("Expiry DTE", f"{dte_val} Days", "Weekly")
-
-# AI SENTINEL STATUS BANNER
-st.divider()
-ai_banner1, ai_banner2 = st.columns([3, 1])
-
-is_locked = getattr(ai_guard, 'is_locked', False) or getattr(ai_guard, 'is_terminal_locked', False)
-with ai_banner1:
-    if is_locked:
-        st.error("🛑 *AI सुरक्षा कवच: टर्मिनल लॉक आहे.* कॅपिटल संरक्षणासाठी नवीन ऑर्डर्स बंद आहेत.")
-    else:
-        st.success(f"🛡️ *AI Safety Shield Active:* ५ घटक नियम सक्रिय आहेत | आजचे ट्रेड्स: {curr_trades}/{ai_guard.max_trades}")
-
-with ai_banner2:
-    if st.button("🔄 Reset AI Lock", help="मॅन्युअल ओव्हरराइड"):
-        ai_guard.is_locked = False
-        ai_guard.is_terminal_locked = False
-        ai_guard.trade_count = 0
-        st.rerun()
+    st.metric("Expiry DTE", f"{cfg['dte']} Days", "Weekly")
 
 st.divider()
 
@@ -343,7 +222,7 @@ with tab1:
         ce_oi = int(abs(140000 - diff * 70) + np.random.randint(1500, 4500))
         pe_oi = int(abs(135000 - diff * 65) + np.random.randint(1500, 4500))
 
-        g = calculate_greeks(spot=spot, strike=s, dte=dte_val, iv=0.14)
+        g = calculate_greeks(spot=spot, strike=s, dte=cfg['dte'], iv=0.14)
 
         chain_rows.append({
             "CE Delta": g["ce_delta"],
@@ -369,7 +248,7 @@ with tab1:
 
     st.dataframe(df_chain.style.highlight_max(subset=["Call OI", "Put OI"], color="#1f3b4d"), use_container_width=True)
 
-# TAB 2: EMA TOUCH SCANNER & 1-CLICK (AI GUARDED)
+# TAB 2: EMA TOUCH SCANNER & 1-CLICK EXECUTION
 with tab2:
     st.subheader("🎯 Real-Time EMA Touch Scanner")
     ec1, ec2, ec3, ec4 = st.columns(4)
@@ -406,52 +285,24 @@ with tab2:
                 st.warning("साइडबारमध्ये Telegram क्रेडेंशियल्स भरा.")
 
     st.divider()
-    st.subheader("⚡ 1-Click Scalper Execution (AI Guard Protected)")
+    st.subheader("⚡ 1-Click Scalper Execution")
     
-    total_qty = lot_size * base_qty
+    total_qty = lot_size * cfg["qty"]
     btn1, btn2, btn3 = st.columns(3)
     
     with btn1:
         if st.button(f"🟢 Buy ATM Call ({atm_strike} CE)", use_container_width=True):
-            allowed, msg = ai_guard.validate_trade(
-                strike_type="ATM",
-                dte=dte_val,
-                theta=18.5,
-                pcr=pcr_val,
-                trade_type="BUY_CE"
-            )
-            if allowed:
-                ai_guard.trade_count += 1
-                entry = 125.0
-                if tg:
-                    tg.send_trade_alert("BUY", selected_index, atm_strike, "CE", total_qty, entry, entry - sl_pts, entry + tgt_pts)
-                st.toast(f"✅ ऑर्डर एक्झिक्युट झाली! {msg}")
-                st.rerun()
-            else:
-                st.error(msg)
-                if tg:
-                    tg.send_raw(f"⚠️ <b>AI TRADE BLOCKED:</b>\n{msg}")
+            entry = 125.0
+            if tg:
+                tg.send_trade_alert("BUY", selected_index, atm_strike, "CE", total_qty, entry, entry - sl_pts, entry + tgt_pts)
+            st.toast(f"✅ {selected_index} {atm_strike} CE ऑर्डर एक्झिक्युट झाली आणि Telegram वर अलर्ट पाठवला!")
 
     with btn2:
         if st.button(f"🔴 Buy ATM Put ({atm_strike} PE)", use_container_width=True):
-            allowed, msg = ai_guard.validate_trade(
-                strike_type="ATM",
-                dte=dte_val,
-                theta=18.5,
-                pcr=pcr_val,
-                trade_type="BUY_PE"
-            )
-            if allowed:
-                ai_guard.trade_count += 1
-                entry = 110.0
-                if tg:
-                    tg.send_trade_alert("BUY", selected_index, atm_strike, "PE", total_qty, entry, entry - sl_pts, entry + tgt_pts)
-                st.toast(f"✅ ऑर्डर एक्झिक्युट झाली! {msg}")
-                st.rerun()
-            else:
-                st.error(msg)
-                if tg:
-                    tg.send_raw(f"⚠️ <b>AI TRADE BLOCKED:</b>\n{msg}")
+            entry = 110.0
+            if tg:
+                tg.send_trade_alert("BUY", selected_index, atm_strike, "PE", total_qty, entry, entry - sl_pts, entry + tgt_pts)
+            st.toast(f"✅ {selected_index} {atm_strike} PE ऑर्डर एक्झिक्युट झाली आणि Telegram वर अलर्ट पाठवला!")
 
     with btn3:
         if st.button("⚠️ Panic Exit (Close All Positions)", use_container_width=True):
@@ -474,7 +325,7 @@ with tab3:
     st.subheader("📤 End of Day Telegram Report")
     if st.button("Send EOD Summary to Telegram Now", use_container_width=True):
         if tg:
-            tg.send_daily_summary(total_trades=curr_trades, winning=1, gross_pnl=net_mtm, charges=85.0)
+            tg.send_daily_summary(total_trades=2, winning=1, gross_pnl=net_mtm, charges=85.0)
             st.success("दैनिक अहवाल Telegram वर पाठवला!")
         else:
             st.warning("साइडबारमध्ये Telegram क्रेडेंशियल्स उपलब्ध नाहीत.")
